@@ -1,0 +1,260 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum RoleName {
+  OWNER
+  ADMIN
+  INVENTORY_MANAGER
+  SALES
+  AUDITOR
+}
+
+enum MovementType {
+  RECEIPT
+  SALE
+  ADJUSTMENT
+  TRANSFER_IN
+  TRANSFER_OUT
+  RETURN_IN
+  RETURN_OUT
+  DAMAGE
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  PENDING
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+enum SaleStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  OTHER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String?
+  hashedPassword String?
+  roles        UserRole[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  auditLogs    AuditLog[]
+}
+
+model Role {
+  id   Int      @id @default(autoincrement())
+  name RoleName @unique
+  users UserRole[]
+}
+
+model UserRole {
+  id     Int    @id @default(autoincrement())
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+  role   Role   @relation(fields: [roleId], references: [id])
+  roleId Int
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  details   Json?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  actorId   String?
+  createdAt DateTime @default(now())
+}
+
+model Category {
+  id    Int     @id @default(autoincrement())
+  name  String  @unique
+  slug  String  @unique
+  products Product[]
+}
+
+model Brand {
+  id    Int     @id @default(autoincrement())
+  name  String  @unique
+  products Product[]
+}
+
+model Supplier {
+  id        Int     @id @default(autoincrement())
+  name      String
+  contact   String?
+  email     String?
+  phone     String?
+  address   String?
+  products  SupplierProduct[]
+  purchaseOrders PurchaseOrder[]
+}
+
+model SupplierProduct {
+  id Int @id @default(autoincrement())
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  supplierId Int
+  sku String
+  supplierSku String?
+  product Product @relation(fields: [productId], references: [id])
+  productId Int
+}
+
+model Location {
+  id Int @id @default(autoincrement())
+  name String
+  code String @unique
+  inventoryMovements InventoryMovement[]
+  inventoryBalances InventoryBalance[]
+}
+
+model Product {
+  id Int @id @default(autoincrement())
+  name String
+  description String?
+  category Category? @relation(fields: [categoryId], references: [id])
+  categoryId Int?
+  brand Brand? @relation(fields: [brandId], references: [id])
+  brandId Int?
+  status String @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  variants ProductVariant[]
+}
+
+model ProductVariant {
+  id Int @id @default(autoincrement())
+  product Product @relation(fields: [productId], references: [id])
+  productId Int
+  sku String @unique
+  barcode String?
+  unit String
+  attributes Json? // size/color/weight
+  cost Decimal @db.Decimal(12,2)
+  price Decimal @db.Decimal(12,2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  inventoryMovements InventoryMovement[]
+  saleItems SaleItem[]
+}
+
+model InventoryMovement {
+  id String @id @default(uuid())
+  type MovementType
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+  productVariantId Int
+  quantity Decimal @db.Decimal(12,3)
+  costPerUnit Decimal? @db.Decimal(12,2)
+  location Location? @relation(fields: [locationId], references: [id])
+  locationId Int?
+  referenceType String?
+  referenceId String?
+  createdBy User? @relation(fields: [createdById], references: [id])
+  createdById String?
+  createdAt DateTime @default(now())
+}
+
+model InventoryBalance {
+  id Int @id @default(autoincrement())
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+  productVariantId Int
+  location Location? @relation(fields: [locationId], references: [id])
+  locationId Int?
+  quantity Decimal @db.Decimal(18,3) @default(0)
+  updatedAt DateTime @updatedAt
+  @@unique([productVariantId, locationId])
+}
+
+model PurchaseOrder {
+  id String @id @default(uuid())
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  supplierId Int
+  status PurchaseOrderStatus @default(DRAFT)
+  items PurchaseOrderItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PurchaseOrderItem {
+  id Int @id @default(autoincrement())
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrderId String
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+  productVariantId Int
+  quantity Decimal @db.Decimal(12,3)
+  unitCost Decimal @db.Decimal(12,2)
+}
+
+model GoodsReceipt {
+  id String @id @default(uuid())
+  externalId String? @unique
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrderId String?
+  receivedBy User? @relation(fields: [receivedById], references: [id])
+  receivedById String?
+  items GoodsReceiptItem[]
+  createdAt DateTime @default(now())
+}
+
+model GoodsReceiptItem {
+  id Int @id @default(autoincrement())
+  goodsReceipt GoodsReceipt @relation(fields: [goodsReceiptId], references: [id])
+  goodsReceiptId String
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+  productVariantId Int
+  quantity Decimal @db.Decimal(12,3)
+  unitCost Decimal @db.Decimal(12,2)
+}
+
+model Sale {
+  id String @id @default(uuid())
+  status SaleStatus @default(DRAFT)
+  items SaleItem[]
+  total Decimal @db.Decimal(12,2)
+  tax Decimal? @db.Decimal(12,2)
+  discount Decimal? @db.Decimal(12,2)
+  paymentMethod PaymentMethod?
+  paymentRef String?
+  createdBy User? @relation(fields: [createdById], references: [id])
+  createdById String?
+  customerName String?
+  createdAt DateTime @default(now())
+}
+
+model SaleItem {
+  id Int @id @default(autoincrement())
+  sale Sale @relation(fields: [saleId], references: [id])
+  saleId String
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+  productVariantId Int
+  quantity Decimal @db.Decimal(12,3)
+  unitPrice Decimal @db.Decimal(12,2)
+  costAtSale Decimal @db.Decimal(12,2)
+}
+
+model Payment {
+  id String @id @default(uuid())
+  sale Sale @relation(fields: [saleId], references: [id])
+  saleId String
+  method PaymentMethod
+  amount Decimal @db.Decimal(12,2)
+  providerRef String?
+  createdAt DateTime @default(now())
+}
