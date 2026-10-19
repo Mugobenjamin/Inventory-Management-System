@@ -3,11 +3,12 @@ import prisma from '@/lib/prisma'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const { page = '1', pageSize = '25', productVariantId } = req.query as any
+    const { page = '1', pageSize = '25', productVariantId, referenceId } = req.query as any
     const pageNum = Math.max(1, Number(page))
     const size = Math.min(200, Number(pageSize))
     const where: any = {}
     if (productVariantId) where.productVariantId = Number(productVariantId)
+    if (referenceId) where.referenceId = String(referenceId)
     const [items, total] = await Promise.all([
       prisma.inventoryMovement.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (pageNum - 1) * size, take: size }),
       prisma.inventoryMovement.count({ where })
